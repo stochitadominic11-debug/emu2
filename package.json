@@ -1,0 +1,11 @@
+{
+  "name": "remote-play-friends",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --prefix apps/web run dev",
+    "dev:api": "npm --prefix apps/api run dev"
+  }
+}
