@@ -14,6 +14,9 @@
 
 require('dotenv').config();
 
+const AGENT_SECRET = process.env.AGENT_SECRET || '';
+const CAPTURE_AGENT_SECRET = process.env.CAPTURE_AGENT_SECRET || AGENT_SECRET;
+
 const path = require('path');
 const http = require('http');
 const express = require('express');
@@ -28,7 +31,6 @@ const auth = require('./lib/auth');
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const GAMES_DIR = process.env.GAMES_DIR || 'C:\\games';
 const SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || String(5 * 60 * 1000), 10);
-const AGENT_SECRET = process.env.AGENT_SECRET || '';
 
 if (!AGENT_SECRET) {
   console.warn('[server] ATTENZIONE: AGENT_SECRET non impostato. L\'agent non potrà collegarsi.');
@@ -213,6 +215,22 @@ server.on('upgrade', (req, socket, head) => {
     });
     return;
   }
+  
+    if (url.pathname === '/ws/capture-agent') {
+    if (url.searchParams.get('secret') !== CAPTURE_AGENT_SECRET || !CAPTURE_AGENT_SECRET) {
+      socket.destroy();
+      return;
+    }
+
+    const sessionId = url.searchParams.get('sessionId');
+    if (!sessionId) {
+      socket.destroy();
+      return;
+    }
+
+    wss.handleUpgrade(req, socket, head, (ws) => handleCaptureAgentConnection(ws, sessionId));
+    return;
+  }
 
   socket.destroy();
 });
@@ -268,6 +286,36 @@ function handleCaptureConnection(ws, sessionId) {
       wsHub.notifyViewer(sessionId, msg);
     } catch {
       /* ignoro messaggi malformati */
+    }
+  });
+
+  ws.on('close', () => {
+    const target = sessionSockets.get(sessionId);
+    if (target) target.capture = null;
+    wsHub.notifyViewer(sessionId, { type: 'capture_disconnected' });
+  });
+}
+
+function handleCaptureAgentConnection(ws, sessionId) {
+  console.log(`[ws] capture-agent connesso per sessione ${sessionId}`);
+  const slot = getOrCreateSlot(sessionId);
+  slot.capture = ws;
+
+  ws.on('message', (data, isBinary) => {
+    if (isBinary) {
+      const target = sessionSockets.get(sessionId);
+      if (target && target.viewer && target.viewer.readyState === target.viewer.OPEN) {
+        target.viewer.send(data, { binary: true });
+      }
+      return;
+    }
+
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === 'started') sessions.setStatus(sessionId, sessions.STATUS.STREAMING);
+      wsHub.notifyViewer(sessionId, msg);
+    } catch {
+      // ignoro
     }
   });
 

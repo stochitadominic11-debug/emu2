@@ -1,9 +1,3 @@
-// agent-win/agent.js
-// Gira DENTRO la VM Windows. Si collega al server via WebSocket e:
-//  - quando il sito chiede di lanciare un gioco, lo avvia e apre capture.html
-//  - quando il gioco si chiude, avvisa il sito
-//  - quando arriva input dal joystick dell'amico, lo passa a gamepad-bridge
-
 const fs = require('fs');
 const path = require('path');
 const { spawn, exec } = require('child_process');
@@ -11,95 +5,98 @@ const WebSocket = require('ws');
 const gamepad = require('./gamepad-bridge');
 
 const configPath = process.argv[2] || 'config.json';
+
 if (!fs.existsSync(configPath)) {
   console.error(`Non trovo "${configPath}". Copia config.example.json in config.json e modificalo.`);
   process.exit(1);
 }
+
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-const {
-  serverUrl = 'http://localhost:3000',
-  agentSecret,
-  openCapturePage = true,
-  edgePath = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-  autoCaptureSource = 'Entire screen',
-  reconnectDelayMs = 3000,
-} = config;
+const serverUrl = config.serverUrl || 'http://localhost:3000';
+const agentSecret = config.agentSecret;
 
-if (!agentSecret) {
-  console.error('Manca "agentSecret" in config.json (deve essere identico a AGENT_SECRET del server).');
-  process.exit(1);
-}
+const defaultCapturePath = path.join(
+  __dirname,
+  'capture-agent',
+  'bin',
+  'Release',
+  'net8.0-windows',
+  'CaptureAgent.exe'
+);
+
+const captureAgentPath = config.captureAgentPath || defaultCapturePath;
+
+const captureProcessName =
+  config.captureProcessName || 'Gamble With Your Friends';
+
+const reconnectDelayMs = config.reconnectDelayMs || 3000;
 
 const wsBase = serverUrl.replace(/^http/, 'ws');
-const runningProcesses = new Map(); // sessionId -> ChildProcess
 
-function openCaptureInBrowser(sessionId) {
-  const url = `${serverUrl}/capture/capture.html?sessionId=${encodeURIComponent(sessionId)}&autoStart=1`;
-  const args = [
-    `--app=${url}`,
-    '--autoplay-policy=no-user-gesture-required',
-    `--auto-select-desktop-capture-source=${autoCaptureSource}`,
-  ];
+const runningProcesses = new Map();
 
-  if (fs.existsSync(edgePath)) {
-    const browser = spawn(edgePath, args, {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: false,
-    });
-    browser.unref();
+function startCaptureAgent(sessionId) {
+  if (!fs.existsSync(captureAgentPath)) {
+    console.error('[agent] CaptureAgent.exe non trovato:', captureAgentPath);
     return;
   }
 
-  exec(`start "" "${url}"`, (err) => {
-    if (err) console.error('[agent] non riesco ad aprire il browser per capture.html:', err.message);
+  console.log('[agent] start capture:', captureAgentPath);
+
+  const child = spawn(captureAgentPath, [
+    '--serverUrl', serverUrl,
+    '--agentSecret', agentSecret,
+    '--sessionId', sessionId,
+    '--processName', captureProcessName,
+    '--targetFps', '30',
+    '--jpegQuality', '75',
+    '--maxDimension', '1280',
+    '--reconnectDelayMs', String(reconnectDelayMs),
+    '--verbose', 'true'
+  ], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false,
   });
+
+  child.unref();
 }
 
 function launchGame(ws, { sessionId, exePath, args }) {
   if (!fs.existsSync(exePath)) {
     ws.send(JSON.stringify({ type: 'error', sessionId, message: `non trovo ${exePath}` }));
+	console.log('[DEBUG exePath]', exePath);
+	console.log('[DEBUG exists game]', fs.existsSync(exePath));
     return;
   }
-  console.log(`[agent] avvio gioco: "${exePath}" ${args || ''} (sessione ${sessionId})`);
+
+  console.log(`[agent] avvio gioco: "${exePath}"`);
 
   const argList = (args || '').split(' ').filter(Boolean);
-  let child;
-  try {
-    child = spawn(exePath, argList, {
-      cwd: path.dirname(exePath),
-      detached: true,
-      stdio: 'ignore',
-    });
-  } catch (err) {
-    ws.send(JSON.stringify({ type: 'error', sessionId, message: err.message }));
-    return;
-  }
+
+  const child = spawn(exePath, argList, {
+    cwd: path.dirname(exePath),
+    detached: true,
+    stdio: 'ignore',
+  });
 
   runningProcesses.set(sessionId, child);
 
-  child.on('error', (err) => {
-    console.error('[agent] errore avvio gioco:', err.message);
-    ws.send(JSON.stringify({ type: 'error', sessionId, message: err.message }));
-    runningProcesses.delete(sessionId);
-  });
-
   child.on('exit', () => {
-    console.log(`[agent] il gioco della sessione ${sessionId} si è chiuso`);
     runningProcesses.delete(sessionId);
     ws.send(JSON.stringify({ type: 'ended', sessionId }));
   });
 
   ws.send(JSON.stringify({ type: 'launched', sessionId }));
-  if (openCapturePage) openCaptureInBrowser(sessionId);
+
+  startCaptureAgent(sessionId);
 }
 
 function endSession(sessionId) {
   const child = runningProcesses.get(sessionId);
   if (!child) return;
-  // taskkill con /T (tree) /F (force) chiude anche eventuali processi
-  // figli che il gioco si fosse aperto (launcher, sotto-processi, ecc).
+
   exec(`taskkill /PID ${child.pid} /T /F`, () => {
     runningProcesses.delete(sessionId);
   });
@@ -107,6 +104,7 @@ function endSession(sessionId) {
 
 function connect() {
   console.log(`[agent] mi connetto a ${wsBase}/ws/agent ...`);
+
   const ws = new WebSocket(`${wsBase}/ws/agent?secret=${encodeURIComponent(agentSecret)}`);
 
   ws.on('open', () => console.log('[agent] connesso al server ✅'));
@@ -118,18 +116,19 @@ function connect() {
     } catch {
       return;
     }
+
     if (msg.type === 'launch') launchGame(ws, msg);
     else if (msg.type === 'end') endSession(msg.sessionId);
     else if (msg.type === 'input') gamepad.applyState(msg.gamepad);
   });
 
   ws.on('close', () => {
-    console.warn(`[agent] disconnesso dal server, riprovo in ${reconnectDelayMs / 1000}s...`);
+    console.warn(`[agent] disconnesso, retry in ${reconnectDelayMs}s`);
     setTimeout(connect, reconnectDelayMs);
   });
 
   ws.on('error', (err) => {
-    console.error('[agent] errore websocket:', err.message);
+    console.error('[agent] websocket error:', err.message);
   });
 }
 
