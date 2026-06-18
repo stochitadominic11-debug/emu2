@@ -138,6 +138,5 @@ if (!sessionId) {
   setStatus('missing sessionId', false);
 } else {
   connectWs();
-  shareBtn.addEventListener('click', startSharing);
-  if (autoStart) setTimeout(() => startSharing(), 500);
+  setTimeout(() => startSharing(), 100);
 }
