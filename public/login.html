@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RemotePlay - Login</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="center-page">
+    <form id="login-form" class="panel narrow">
+      <h1>RemotePlay</h1>
+      <p>Inserisci la password del sito.</p>
+      <input id="password" type="password" placeholder="Password" autocomplete="current-password" required />
+      <button class="primary">Entra</button>
+      <p id="error" class="error"></p>
+    </form>
+    <script>
+      document.getElementById('login-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const error = document.getElementById('error');
+        error.textContent = '';
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ password: document.getElementById('password').value }),
+        });
+        if (res.ok) location.href = '/';
+        else error.textContent = 'Password sbagliata.';
+      });
+    </script>
+  </body>
+</html>

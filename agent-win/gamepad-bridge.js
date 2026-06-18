@@ -1,44 +1,21 @@
-// agent-win/gamepad-bridge.js
-//
-// Traduce lo stato del controller letto dal browser dell'amico (Gamepad API)
-// in input per un Xbox 360 Controller VIRTUALE, cosi il gioco nella VM lo
-// vede come un controller vero e proprio collegato.
-//
-// Richiede il driver ViGEmBus installato nella VM (gratuito, open source,
-// lo stesso usato da Moonlight/Sunshine):
-//   https://github.com/ViGEm/ViGEmBus/releases
-//
-// Se il driver o il pacchetto npm "vigemclient" non sono disponibili,
-// questo modulo si disattiva da solo: il resto del sistema (video/audio/
-// avvio gioco) continua a funzionare normalmente, semplicemente senza
-// joystick virtuale.
-//
-// NOTA: i nomi esatti dei metodi di "vigemclient" possono cambiare da
-// versione a versione. Se qualcosa qui sotto non corrisponde più al
-// pacchetto installato, controlla la pagina npm/GitHub di "vigemclient"
-// e aggiusta la mappatura: la logica (quale indice del Gamepad API va
-// su quale pulsante/asse) resta valida.
+// Translates browser Gamepad API state into a virtual Xbox 360 controller.
+// Requires ViGEmBus installed in the Windows VM.
 
 let client = null;
 let controller = null;
 let available = false;
 
-// Indici "standard" della Gamepad API -> nome pulsante XInput
 const BUTTON_MAP = {
   0: 'A',
   1: 'B',
   2: 'X',
   3: 'Y',
-  4: 'LeftShoulder',
-  5: 'RightShoulder',
-  8: 'Back',
-  9: 'Start',
-  10: 'LeftThumb',
-  11: 'RightThumb',
-  12: 'Up',
-  13: 'Down',
-  14: 'Left',
-  15: 'Right',
+  4: 'LEFT_SHOULDER',
+  5: 'RIGHT_SHOULDER',
+  8: 'BACK',
+  9: 'START',
+  10: 'LEFT_THUMB',
+  11: 'RIGHT_THUMB',
 };
 
 function init() {
@@ -46,17 +23,21 @@ function init() {
     // eslint-disable-next-line global-require
     const ViGEmClient = require('vigemclient');
     client = new ViGEmClient();
-    client.connect();
+    const connectErr = client.connect();
+    if (connectErr) throw connectErr;
+
     controller = client.createX360Controller();
-    controller.connect();
+    const controllerErr = controller.connect();
+    if (controllerErr) throw controllerErr;
+
+    controller.updateMode = 'manual';
     available = true;
-    console.log('[gamepad] ViGEmBus trovato: controller virtuale creato e connesso.');
+    console.log('[gamepad] ViGEmBus OK: virtual Xbox 360 controller connected.');
   } catch (err) {
     available = false;
     console.warn(
-      '[gamepad] ViGEmBus/vigemclient non disponibili. Il joystick remoto non funzionerà ' +
-        '(ma video, audio e avvio gioco sì). Installa ViGEmBus e fai "npm install" in agent-win. ' +
-        'Dettaglio errore: ' + err.message
+      '[gamepad] ViGEmBus/vigemclient unavailable. Remote controller disabled. ' +
+        'Install ViGEmBus and run npm install in agent-win. Detail: ' + err.message
     );
   }
 }
@@ -65,37 +46,53 @@ function safeCall(fn) {
   try {
     fn();
   } catch (err) {
-    // Non blocchiamo mai il resto dell'agent per un singolo input che fallisce.
-    console.warn('[gamepad] errore mentre impostavo un input:', err.message);
+    console.warn('[gamepad] input error:', err.message);
   }
 }
 
-// gamepadState arriva così com'è dalla Gamepad API del browser:
-//  buttons: array di valori 0..1 (1 = premuto a fondo)
-//  axes: [leftX, leftY, rightX, rightY] ognuno -1..1
+function numberOr(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function setButton(name, pressed) {
+  const button = controller.button && controller.button[name];
+  if (!button || typeof button.setValue !== 'function') {
+    throw new Error(`ViGEm button not found: ${name}`);
+  }
+  button.setValue(!!pressed);
+}
+
+function setAxis(name, value) {
+  const axis = controller.axis && controller.axis[name];
+  if (!axis || typeof axis.setValue !== 'function') {
+    throw new Error(`ViGEm axis not found: ${name}`);
+  }
+  axis.setValue(numberOr(value));
+}
+
 function applyState(gamepadState) {
-  if (!available || !controller) return;
-  const { buttons = [], axes = [] } = gamepadState;
+  if (!available || !controller || !gamepadState || typeof gamepadState !== 'object') return;
+
+  const buttons = Array.isArray(gamepadState.buttons) ? gamepadState.buttons : [];
+  const axes = Array.isArray(gamepadState.axes) ? gamepadState.axes : [];
 
   for (const [indexStr, buttonName] of Object.entries(BUTTON_MAP)) {
     const index = Number(indexStr);
-    const pressed = (buttons[index] || 0) > 0.5;
-    safeCall(() => controller.button[buttonName].setValue(pressed));
+    safeCall(() => setButton(buttonName, numberOr(buttons[index]) > 0.5));
   }
 
-  // I grilletti (indici 6 e 7) sono analogici: li mandiamo come assi, non come on/off.
-  const leftTrigger = buttons[6] || 0;
-  const rightTrigger = buttons[7] || 0;
-  safeCall(() => controller.axis.leftTrigger.setValue(leftTrigger));
-  safeCall(() => controller.axis.rightTrigger.setValue(rightTrigger));
+  safeCall(() => setAxis('dpadHorz', numberOr(buttons[15]) - numberOr(buttons[14])));
+  safeCall(() => setAxis('dpadVert', numberOr(buttons[12]) - numberOr(buttons[13])));
+
+  safeCall(() => setAxis('leftTrigger', numberOr(buttons[6])));
+  safeCall(() => setAxis('rightTrigger', numberOr(buttons[7])));
 
   const [lx = 0, ly = 0, rx = 0, ry = 0] = axes;
-  safeCall(() => controller.axis.leftX.setValue(lx));
-  // Nota: l'asse Y della Gamepad API ha "su" negativo; se nel gioco i
-  // movimenti su/giù risultano invertiti, togli il segno meno qui sotto.
-  safeCall(() => controller.axis.leftY.setValue(-ly));
-  safeCall(() => controller.axis.rightX.setValue(rx));
-  safeCall(() => controller.axis.rightY.setValue(-ry));
+  safeCall(() => setAxis('leftX', lx));
+  safeCall(() => setAxis('leftY', -ly));
+  safeCall(() => setAxis('rightX', rx));
+  safeCall(() => setAxis('rightY', -ry));
 
   safeCall(() => controller.update());
 }

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RemotePlay</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <strong>RemotePlay</strong>
+        <span id="status">carico...</span>
+      </div>
+      <button id="logout" class="ghost">Esci</button>
+    </header>
+    <main>
+      <section class="hero">
+        <h1>Libreria VM</h1>
+        <p>I giochi vengono letti automaticamente dalla cartella configurata nella VM.</p>
+      </section>
+      <section id="games" class="grid"></section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

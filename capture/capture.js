@@ -1,28 +1,29 @@
-// capture/capture.js
-// Gira nel browser DENTRO la VM. Cattura schermo (+ audio se possibile)
-// e manda tutto al server via WebSocket, un frame JPEG alla volta.
-//
-// Protocollo binario: il primo byte del messaggio dice cosa contiene:
-//   1 = frame video (JPEG)
-//   2 = chunk audio (webm/opus)
+// Runs in the VM browser. Captures screen/audio and forwards it to the viewer.
+// Binary packet protocol:
+//   byte 0 = 1: JPEG video frame
+//   byte 0 = 2: webm/opus audio chunk
 
-const FRAME_INTERVAL_MS = 80; // ~12.5 fps: equilibrio fra fluidità e banda
-const JPEG_QUALITY = 0.6;
-const MAX_DIMENSION = 1280; // non mandiamo frame più grandi di così
+const TARGET_FPS = 60;
+const FRAME_INTERVAL_MS = Math.round(1000 / TARGET_FPS);
+const JPEG_QUALITY = 0.72;
+const MAX_DIMENSION = 1280;
+const AUDIO_CHUNK_MS = 100;
 
 const params = new URLSearchParams(location.search);
 const sessionId = params.get('sessionId');
+const autoStart = params.get('autoStart') === '1';
 
 const shareBtn = document.getElementById('share-btn');
 const statusDot = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
 const previewVideo = document.getElementById('preview');
 const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d', { alpha: false });
+const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
 let ws = null;
 let frameTimer = null;
 let mediaRecorder = null;
+let encodingFrame = false;
 
 function setStatus(text, live) {
   statusText.textContent = text;
@@ -31,38 +32,39 @@ function setStatus(text, live) {
 
 function connectWs() {
   const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${wsProto}//${location.host}/ws/capture?sessionId=${sessionId}`);
+  ws = new WebSocket(`${wsProto}//${location.host}/ws/capture?sessionId=${encodeURIComponent(sessionId)}`);
   ws.binaryType = 'arraybuffer';
 
-  ws.addEventListener('open', () => setStatus('connesso al server, pronto', false));
-  ws.addEventListener('close', () => setStatus('disconnesso dal server', false));
-  ws.addEventListener('error', () => setStatus('errore di connessione', false));
+  ws.addEventListener('open', () => setStatus('connected, ready', false));
+  ws.addEventListener('close', () => setStatus('server disconnected', false));
+  ws.addEventListener('error', () => setStatus('connection error', false));
 }
 
-function sendBinary(typeByte, arrayBufferOrBlob) {
+async function sendBinary(typeByte, arrayBufferOrBlob) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  Promise.resolve(arrayBufferOrBlob instanceof Blob ? arrayBufferOrBlob.arrayBuffer() : arrayBufferOrBlob).then(
-    (buf) => {
-      const payload = new Uint8Array(buf.byteLength + 1);
-      payload[0] = typeByte;
-      payload.set(new Uint8Array(buf), 1);
-      ws.send(payload);
-    }
-  );
+  if (ws.bufferedAmount > 16 * 1024 * 1024) return;
+  const buf = arrayBufferOrBlob instanceof Blob ? await arrayBufferOrBlob.arrayBuffer() : arrayBufferOrBlob;
+  const payload = new Uint8Array(buf.byteLength + 1);
+  payload[0] = typeByte;
+  payload.set(new Uint8Array(buf), 1);
+  ws.send(payload);
 }
 
 function startFrameLoop(videoEl) {
-  let { videoWidth: w, videoHeight: h } = videoEl;
-  const scale = Math.min(1, MAX_DIMENSION / Math.max(w, h));
-  canvas.width = Math.round(w * scale);
-  canvas.height = Math.round(h * scale);
+  const { videoWidth: w, videoHeight: h } = videoEl;
+  const scale = Math.min(1, MAX_DIMENSION / Math.max(w || 1, h || 1));
+  canvas.width = Math.max(2, Math.round(w * scale));
+  canvas.height = Math.max(2, Math.round(h * scale));
 
   frameTimer = setInterval(() => {
-    if (videoEl.readyState < 2) return;
+    if (videoEl.readyState < 2 || encodingFrame) return;
+    if (ws && ws.bufferedAmount > 8 * 1024 * 1024) return;
+    encodingFrame = true;
     ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(
       (blob) => {
-        if (blob) sendBinary(1, blob);
+        if (blob) sendBinary(1, blob).finally(() => { encodingFrame = false; });
+        else encodingFrame = false;
       },
       'image/jpeg',
       JPEG_QUALITY
@@ -73,27 +75,32 @@ function startFrameLoop(videoEl) {
 function startAudioCapture(stream) {
   const audioTracks = stream.getAudioTracks();
   if (audioTracks.length === 0) {
-    console.warn('Nessuna traccia audio (probabilmente hai condiviso solo una finestra, non lo schermo intero).');
+    console.warn('No audio track. In Chrome/Edge, choose entire screen and enable system audio.');
     return;
   }
-  const audioStream = new MediaStream(audioTracks);
+
   try {
-    mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm;codecs=opus' });
+    mediaRecorder = new MediaRecorder(new MediaStream(audioTracks), { mimeType: 'audio/webm;codecs=opus' });
   } catch (err) {
-    console.warn('MediaRecorder non disponibile per audio:', err.message);
+    console.warn('MediaRecorder audio unavailable:', err.message);
     return;
   }
+
   mediaRecorder.ondataavailable = (ev) => {
     if (ev.data && ev.data.size > 0) sendBinary(2, ev.data);
   };
-  mediaRecorder.start(250); // un chunk ogni 250ms
+  mediaRecorder.start(AUDIO_CHUNK_MS);
 }
 
 async function startSharing() {
   shareBtn.disabled = true;
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: 15 },
+      video: {
+        frameRate: { ideal: 60, max: 60 },
+        width: { ideal: 1280, max: 1920 },
+        height: { ideal: 720, max: 1080 },
+      },
       audio: true,
     });
 
@@ -103,23 +110,24 @@ async function startSharing() {
     startFrameLoop(previewVideo);
     startAudioCapture(stream);
 
-    setStatus('condivisione attiva', true);
+    setStatus('sharing active', true);
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'started' }));
     }
 
-    // L'utente può fermare la condivisione dalla barra nativa del browser.
     stream.getVideoTracks()[0].addEventListener('ended', stopSharing);
   } catch (err) {
-    setStatus('condivisione annullata o negata', false);
+    console.warn(err);
+    setStatus('sharing cancelled or denied', false);
     shareBtn.disabled = false;
   }
 }
 
 function stopSharing() {
   clearInterval(frameTimer);
+  frameTimer = null;
   if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-  setStatus('condivisione interrotta', false);
+  setStatus('sharing stopped', false);
   shareBtn.disabled = false;
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'capture_stopped' }));
@@ -127,8 +135,9 @@ function stopSharing() {
 }
 
 if (!sessionId) {
-  setStatus('URL senza sessionId, qualcosa non va', false);
+  setStatus('missing sessionId', false);
 } else {
   connectWs();
   shareBtn.addEventListener('click', startSharing);
+  if (autoStart) setTimeout(() => startSharing(), 500);
 }

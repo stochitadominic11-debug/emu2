@@ -21,6 +21,8 @@ const {
   serverUrl = 'http://localhost:3000',
   agentSecret,
   openCapturePage = true,
+  edgePath = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  autoCaptureSource = 'Entire screen',
   reconnectDelayMs = 3000,
 } = config;
 
@@ -33,7 +35,23 @@ const wsBase = serverUrl.replace(/^http/, 'ws');
 const runningProcesses = new Map(); // sessionId -> ChildProcess
 
 function openCaptureInBrowser(sessionId) {
-  const url = `${serverUrl}/capture/capture.html?sessionId=${sessionId}`;
+  const url = `${serverUrl}/capture/capture.html?sessionId=${encodeURIComponent(sessionId)}&autoStart=1`;
+  const args = [
+    `--app=${url}`,
+    '--autoplay-policy=no-user-gesture-required',
+    `--auto-select-desktop-capture-source=${autoCaptureSource}`,
+  ];
+
+  if (fs.existsSync(edgePath)) {
+    const browser = spawn(edgePath, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+    });
+    browser.unref();
+    return;
+  }
+
   exec(`start "" "${url}"`, (err) => {
     if (err) console.error('[agent] non riesco ad aprire il browser per capture.html:', err.message);
   });
