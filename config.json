@@ -1,0 +1,14 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 3000,
+    "ssl": false
+  },
+  "agent": {
+    "name": "Il Mio PC",
+    "video": {
+      "fps": 60,
+      "bitrate": 15000
+    }
+  }
+}

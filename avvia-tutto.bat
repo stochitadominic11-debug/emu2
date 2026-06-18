@@ -42,8 +42,11 @@ start "RemotePlay - Server" cmd /k "cd /d "%PROJECT_DIR%" && node server.js"
 echo Aspetto che il server sia pronto...
 timeout /t 3 /nobreak >nul
 
+:: ---------- CORREZIONE QUI ----------
+:: Passiamo il percorso ASSOLUTO di config.json all'agent
+:: così lui sa dove sono i file anche se giriamo dalla cartella agent-win
 echo Avvio l'agent ^(lancio giochi + joystick^)...
-start "RemotePlay - Agent" cmd /k "cd /d "%PROJECT_DIR%\agent-win" && node agent.js config.json"
+start "RemotePlay - Agent" cmd /k "cd /d "%PROJECT_DIR%\agent-win" && node agent.js "%PROJECT_DIR%\config.json""
 
 echo.
 echo Fatto. Si sono aperte due finestre: Server e Agent.
@@ -52,6 +55,3 @@ echo Per fermare tutto, chiudi entrambe le finestre.
 echo.
 pause
 endlocal
-BATEOF
-echo "--- contenuto scritto, righe totali: ---"
-wc -l /home/claude/remote-play-web/avvia-tutto.bat

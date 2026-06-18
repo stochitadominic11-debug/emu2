@@ -1,7 +1,7 @@
 {
   "serverUrl": "http://localhost:3000",
   "agentSecret": "w8yh7gs9fbvz602c",
-  "captureAgentPath": "agent-win\\\\capture-agent\\\\bin\\\\Release\\\\net8.0-windows\\\\CaptureAgent.exe",
+  "captureAgentPath": "C:\\Users\\Dominic\\Documents\\Codex\\2026-06-16\\ho-un-idea-io-sono-da\\outputs\\emu2-fixed-source\\agent-win\\capture-agent\\bin\\Release\\net8.0-windows\\CaptureAgent.exe",
   "captureProcessName": "Gamble With Your Friends.exe",
   "reconnectDelayMs": 3000
 }
