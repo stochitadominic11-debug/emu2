@@ -35,6 +35,10 @@ if not exist "%PROJECT_DIR%\agent-win\node_modules" (
     popd
 )
 
+:: ---------- leggo la porta dal .env (default 3000) ----------
+set "SITE_PORT=3000"
+for /f "tokens=2 delims==" %%P in ('findstr /b "PORT=" "%PROJECT_DIR%\.env" 2^>nul') do set "SITE_PORT=%%P"
+
 :: ---------- avvio vero e proprio ----------
 echo Avvio il server ^(sito + libreria^)...
 start "RemotePlay - Server" cmd /k "cd /d "%PROJECT_DIR%" && node server.js"
@@ -42,16 +46,28 @@ start "RemotePlay - Server" cmd /k "cd /d "%PROJECT_DIR%" && node server.js"
 echo Aspetto che il server sia pronto...
 timeout /t 3 /nobreak >nul
 
-:: ---------- CORREZIONE QUI ----------
-:: Passiamo il percorso ASSOLUTO di config.json all'agent
-:: così lui sa dove sono i file anche se giriamo dalla cartella agent-win
-echo Avvio l'agent ^(lancio giochi + joystick^)...
-start "RemotePlay - Agent" cmd /k "cd /d "%PROJECT_DIR%\agent-win" && node agent.js "%PROJECT_DIR%\config.json""
+echo Avvio l'agent (lancio giochi + joystick)...
+start "RemotePlay - Agent" cmd /k "cd /d "%PROJECT_DIR%\agent-win" && node agent.js config.json"
+
+:: ---------- tunnel pubblico (Cloudflare), solo se cloudflared.exe c'e' ----------
+if exist "%PROJECT_DIR%\cloudflared.exe" (
+    echo Avvio il tunnel pubblico...
+    start "RemotePlay - Tunnel (link per l'amico)" cmd /k "cd /d "%PROJECT_DIR%" && cloudflared.exe tunnel --url http://localhost:%SITE_PORT%"
+) else (
+    echo.
+    echo [Nota] cloudflared.exe non trovato in questa cartella: il sito sara'
+    echo raggiungibile solo nella tua rete locale. Per giocare con il tuo amico
+    echo da reti diverse, scarica cloudflared.exe da
+    echo https://github.com/cloudflare/cloudflared/releases
+    echo e mettilo in questa stessa cartella, poi rilancia questo file.
+    echo.
+)
 
 echo.
-echo Fatto. Si sono aperte due finestre: Server e Agent.
-echo Lasciale aperte mentre giocate.
-echo Per fermare tutto, chiudi entrambe le finestre.
+echo Fatto. Si sono aperte le finestre: Server, Agent^, e Tunnel se presente.
+echo Guarda la finestra "Tunnel" per il link https://...trycloudflare.com
+echo da mandare al tuo amico - cambia ogni volta che riavvii questo file.
+echo Lasciale tutte aperte mentre giocate.
 echo.
 pause
 endlocal

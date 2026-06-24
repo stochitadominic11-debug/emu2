@@ -133,11 +133,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Dominic\\Documents\\Codex\\2026-06-16\\ho-un-idea-io-sono-da\\outputs\\emu2-fixed-source\\agent-win\\capture-agent\\CaptureAgent.csproj",
+      "projectUniqueName": "C:\\Users\\Dominic\\Downloads\\remote-play-web_3\\remote-play-web\\agent-win\\capture-agent\\CaptureAgent.csproj",
       "projectName": "CaptureAgent",
-      "projectPath": "C:\\Users\\Dominic\\Documents\\Codex\\2026-06-16\\ho-un-idea-io-sono-da\\outputs\\emu2-fixed-source\\agent-win\\capture-agent\\CaptureAgent.csproj",
+      "projectPath": "C:\\Users\\Dominic\\Downloads\\remote-play-web_3\\remote-play-web\\agent-win\\capture-agent\\CaptureAgent.csproj",
       "packagesPath": "C:\\Users\\Dominic\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Dominic\\Documents\\Codex\\2026-06-16\\ho-un-idea-io-sono-da\\outputs\\emu2-fixed-source\\agent-win\\capture-agent\\obj\\",
+      "outputPath": "C:\\Users\\Dominic\\Downloads\\remote-play-web_3\\remote-play-web\\agent-win\\capture-agent\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\Dominic\\AppData\\Roaming\\NuGet\\NuGet.Config"

@@ -1,0 +1,6 @@
+C:\Users\Dominic\Downloads\remote-play-web_3\remote-play-web\agent-win\capture-agent\bin\Release\net8.0-windows\publish\CaptureAgent.exe
+C:\Users\Dominic\Downloads\remote-play-web_3\remote-play-web\agent-win\capture-agent\bin\Release\net8.0-windows\publish\CaptureAgent.dll
+C:\Users\Dominic\Downloads\remote-play-web_3\remote-play-web\agent-win\capture-agent\bin\Release\net8.0-windows\publish\CaptureAgent.deps.json
+C:\Users\Dominic\Downloads\remote-play-web_3\remote-play-web\agent-win\capture-agent\bin\Release\net8.0-windows\publish\CaptureAgent.runtimeconfig.json
+C:\Users\Dominic\Downloads\remote-play-web_3\remote-play-web\agent-win\capture-agent\bin\Release\net8.0-windows\publish\CaptureAgent.pdb
+C:\Users\Dominic\Downloads\remote-play-web_3\remote-play-web\agent-win\capture-agent\bin\Release\net8.0-windows\publish\System.Drawing.Common.dll

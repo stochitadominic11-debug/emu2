@@ -1,26 +1,141 @@
 <!doctype html>
 <html lang="it">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RemotePlay</title>
-    <link rel="stylesheet" href="/style.css" />
-  </head>
-  <body>
-    <header class="topbar">
-      <div>
-        <strong>RemotePlay</strong>
-        <span id="status">carico...</span>
-      </div>
-      <button id="logout" class="ghost">Esci</button>
-    </header>
-    <main>
-      <section class="hero">
-        <h1>Libreria VM</h1>
-        <p>I giochi vengono letti automaticamente dalla cartella configurata nella VM.</p>
-      </section>
-      <section id="games" class="grid"></section>
-    </main>
-    <script src="/app.js"></script>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Libreria — RemotePlay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .topbar {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 2rem clamp(1rem, 5vw, 3rem) 1rem;
+    }
+    .topbar h1 {
+      font-size: clamp(1.6rem, 3vw, 2.1rem);
+    }
+    .status-line {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+    }
+    main {
+      padding: 0 clamp(1rem, 5vw, 3rem) 3rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 1.25rem;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.15s ease;
+    }
+    .card:hover {
+      border-color: var(--text-dim);
+    }
+    .card .cover {
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      object-fit: cover;
+      background: var(--surface-2);
+      display: block;
+    }
+    .card .body {
+      padding: 0.85rem 0.95rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      flex: 1;
+    }
+    .card .name {
+      font-weight: 600;
+      font-size: 0.98rem;
+      line-height: 1.25;
+    }
+    .card .live-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+    }
+    .card .actions {
+      margin-top: auto;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .card .actions button {
+      flex: 1;
+    }
+    .empty-state {
+      margin-top: 3rem;
+      padding: 2.5rem 2rem;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      text-align: center;
+      max-width: 480px;
+      margin-inline: auto;
+    }
+    .empty-state h2 {
+      font-size: 1.15rem;
+      margin-bottom: 0.6rem;
+    }
+    .empty-state code {
+      background: var(--surface-2);
+      padding: 0.15rem 0.4rem;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+    }
+    .banner {
+      margin: 0 clamp(1rem, 5vw, 3rem);
+      padding: 0.8rem 1rem;
+      background: var(--accent-dim);
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+      border-radius: 10px;
+      font-size: 0.88rem;
+      display: none;
+    }
+    .banner.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Libreria</h1>
+    <div class="status-line dim">
+      <span class="status-dot" id="agent-dot"></span>
+      <span id="agent-text">agent…</span>
+    </div>
+  </div>
+
+  <div class="banner" id="banner"></div>
+
+  <main>
+    <div class="grid" id="grid"></div>
+    <div class="empty-state" id="empty-state" style="display: none;">
+      <h2>Ancora nessun gioco</h2>
+      <p class="dim">
+        Metti una cartella con dentro un <code>.exe</code> in <code id="games-dir-path">C:\games</code>.
+        Compare qui entro qualche minuto, in automatico — nessun inserimento a mano.
+      </p>
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
 </html>

@@ -74,7 +74,6 @@ app.get('/login.html', (req, res) => {
 app.use(auth.requireAuth);
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/capture', express.static(path.join(__dirname, 'capture')));
 
 function publicGameView(game) {
   const active = sessions.getActiveSession();
@@ -199,7 +198,7 @@ server.on('upgrade', (req, socket, head) => {
     return;
   }
 
-  if (url.pathname === '/ws/capture' || url.pathname === '/ws/view') {
+  if (url.pathname === '/ws/view') {
     if (!auth.isRequestAuthenticated(req)) {
       socket.destroy();
       return;
@@ -209,14 +208,11 @@ server.on('upgrade', (req, socket, head) => {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      if (url.pathname === '/ws/capture') handleCaptureConnection(ws, sessionId);
-      else handleViewerConnection(ws, sessionId);
-    });
+    wss.handleUpgrade(req, socket, head, (ws) => handleViewerConnection(ws, sessionId));
     return;
   }
-  
-    if (url.pathname === '/ws/capture-agent') {
+
+  if (url.pathname === '/ws/capture-agent') {
     if (url.searchParams.get('secret') !== CAPTURE_AGENT_SECRET || !CAPTURE_AGENT_SECRET) {
       socket.destroy();
       return;
@@ -264,41 +260,15 @@ function handleAgentConnection(ws) {
   });
 }
 
-function handleCaptureConnection(ws, sessionId) {
-  console.log(`[ws] capture connesso per sessione ${sessionId}`);
-  const slot = getOrCreateSlot(sessionId);
-  slot.capture = ws;
-
-  ws.on('message', (data, isBinary) => {
-    if (isBinary) {
-      // frame video o chunk audio: lo passo dritto al viewer, senza
-      // toccarlo (così non perdo tempo/latenza a parsare nulla).
-      const target = sessionSockets.get(sessionId);
-      if (target && target.viewer && target.viewer.readyState === target.viewer.OPEN) {
-        target.viewer.send(data, { binary: true });
-      }
-      return;
-    }
-    // messaggi di controllo testuali (es. {type:'started'})
-    try {
-      const msg = JSON.parse(data.toString());
-      if (msg.type === 'started') sessions.setStatus(sessionId, sessions.STATUS.STREAMING);
-      wsHub.notifyViewer(sessionId, msg);
-    } catch {
-      /* ignoro messaggi malformati */
-    }
-  });
-
-  ws.on('close', () => {
-    const target = sessionSockets.get(sessionId);
-    if (target) target.capture = null;
-    wsHub.notifyViewer(sessionId, { type: 'capture_disconnected' });
-  });
-}
-
 function handleCaptureAgentConnection(ws, sessionId) {
   console.log(`[ws] capture-agent connesso per sessione ${sessionId}`);
   const slot = getOrCreateSlot(sessionId);
+
+  // Chiudo esplicitamente il vecchio WS se era ancora aperto, per non
+  // lasciarlo zombie (genera close-event spurio che azzererebbe slot.capture).
+  if (slot.capture && slot.capture !== ws && slot.capture.readyState === slot.capture.OPEN) {
+    try { slot.capture.close(1000, 'sostituito da nuova connessione'); } catch {}
+  }
   slot.capture = ws;
 
   ws.on('message', (data, isBinary) => {
@@ -312,8 +282,15 @@ function handleCaptureAgentConnection(ws, sessionId) {
 
     try {
       const msg = JSON.parse(data.toString());
-      if (msg.type === 'started') sessions.setStatus(sessionId, sessions.STATUS.STREAMING);
-      wsHub.notifyViewer(sessionId, msg);
+      // Il C# usa PascalCase per i campi (Type, Message); il JS usa camelCase.
+      // Gestiamo entrambi per robustezza.
+      const type = msg.type || msg.Type;
+      if (type === 'started' || type === 'attached') {
+        sessions.setStatus(sessionId, sessions.STATUS.STREAMING);
+      }
+      // Normalizziamo il messaggio a camelCase prima di mandarlo al viewer.
+      const normalizedMsg = type ? { ...msg, type } : msg;
+      wsHub.notifyViewer(sessionId, normalizedMsg);
     } catch {
       // ignoro
     }
@@ -321,8 +298,12 @@ function handleCaptureAgentConnection(ws, sessionId) {
 
   ws.on('close', () => {
     const target = sessionSockets.get(sessionId);
-    if (target) target.capture = null;
-    wsHub.notifyViewer(sessionId, { type: 'capture_disconnected' });
+    // Azzero capture solo se è ancora il WS che si è appena chiuso;
+    // se nel frattempo un nuovo si è già connesso, non tocco nulla.
+    if (target && target.capture === ws) {
+      target.capture = null;
+      wsHub.notifyViewer(sessionId, { type: 'capture_disconnected' });
+    }
   });
 }
 
@@ -330,6 +311,8 @@ function handleViewerConnection(ws, sessionId) {
   console.log(`[ws] viewer connesso per sessione ${sessionId}`);
   const slot = getOrCreateSlot(sessionId);
   slot.viewer = ws;
+
+  let inputCount = 0; // solo per il log diagnostico, non serve ad altro
 
   ws.on('message', (data, isBinary) => {
     if (isBinary) return; // il viewer non manda mai binario, solo JSON
@@ -340,10 +323,40 @@ function handleViewerConnection(ws, sessionId) {
       return;
     }
     if (msg.type === 'input') {
-      // Il joystick (o tastiera/mouse) dell'amico va dritto all'agent,
-      // MAI a capture.html: un tab di browser non può iniettare input
-      // nel sistema, solo agent.js può farlo (ha accesso nativo a Windows).
+      const agentOk = !!(wsHub.agent && wsHub.agent.readyState === wsHub.agent.OPEN);
+
+      inputCount++;
+      if (inputCount % 20 === 1) {
+        // ~1 volta al secondo (20Hz lato client): conferma che l'input
+        // arriva davvero dal browser, e se l'agent e' raggiungibile.
+        const btns = (msg.gamepad?.buttons || []).map((b) => Number(b).toFixed(1)).join(',');
+        const axes = (msg.gamepad?.axes || []).map((a) => Number(a).toFixed(2)).join(',');
+        console.log(`[input] dal viewer (sessione ${sessionId.slice(0, 8)}…): buttons=[${btns}] axes=[${axes}] -> agent ${agentOk ? 'connesso ✅' : 'NON CONNESSO ❌'}`);
+      }
+
+      // Il controller dell'amico va a DUE destinatari:
+      //  - all'agent (agent.js), che lo inietta in un joystick Xbox virtuale,
+      //    per i giochi che supportano il controller;
+      //  - al capture-agent (C#), che lo traduce in tastiera+mouse, per i giochi
+      //    che si giocano con WASD + mouse + tasti (e ignorano il joystick).
+      // Un browser invece non può iniettare input nel sistema: solo loro due.
       wsHub.sendToAgent({ type: 'input', sessionId, gamepad: msg.gamepad });
+      wsHub.notifyCapture(sessionId, {
+        type: 'input',
+        gamepad: msg.gamepad,
+        lookSensitivity: msg.lookSensitivity, // sensibilità visuale scelta nel sito
+      });
+    } else if (msg.type === 'mouse') {
+      // Il tocco/click sul video diventa un click reale nel gioco. A differenza
+      // del joystick, lo gestisce il capture-agent (C#): è lui che sa qual è la
+      // finestra del gioco e dove sta sullo schermo, quindi mappa le coordinate
+      // normalizzate (0..1) sul pixel giusto e inietta il mouse.
+      wsHub.notifyCapture(sessionId, {
+        type: 'mouse',
+        action: msg.action,
+        x: msg.x,
+        y: msg.y,
+      });
     }
   });
 

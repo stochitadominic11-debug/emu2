@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "QdjvUPoTkyk=",
+  "dgSpecHash": "7o799caqehA=",
   "success": true,
-  "projectFilePath": "C:\\Users\\Dominic\\Documents\\Codex\\2026-06-16\\ho-un-idea-io-sono-da\\outputs\\emu2-fixed-source\\agent-win\\capture-agent\\CaptureAgent.csproj",
+  "projectFilePath": "C:\\Users\\Dominic\\Downloads\\remote-play-web_3\\remote-play-web\\agent-win\\capture-agent\\CaptureAgent.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Dominic\\.nuget\\packages\\microsoft.win32.systemevents\\8.0.0\\microsoft.win32.systemevents.8.0.0.nupkg.sha512",
     "C:\\Users\\Dominic\\.nuget\\packages\\system.drawing.common\\8.0.10\\system.drawing.common.8.0.10.nupkg.sha512"

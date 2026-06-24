@@ -1,32 +1,83 @@
 <!doctype html>
 <html lang="it">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RemotePlay - Login</title>
-    <link rel="stylesheet" href="/style.css" />
-  </head>
-  <body class="center-page">
-    <form id="login-form" class="panel narrow">
-      <h1>RemotePlay</h1>
-      <p>Inserisci la password del sito.</p>
-      <input id="password" type="password" placeholder="Password" autocomplete="current-password" required />
-      <button class="primary">Entra</button>
-      <p id="error" class="error"></p>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Accedi — RemotePlay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .card {
+      width: 100%;
+      max-width: 360px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 2rem;
+    }
+    .card h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.35rem;
+    }
+    .card p {
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    #error {
+      color: var(--danger);
+      font-size: 0.9rem;
+      min-height: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>RemotePlay</h1>
+    <p class="dim">Inserisci la password per entrare nella libreria.</p>
+    <form id="login-form">
+      <input type="password" id="password" placeholder="Password" autofocus required />
+      <div id="error"></div>
+      <button type="submit" class="primary">Entra</button>
     </form>
-    <script>
-      document.getElementById('login-form').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const error = document.getElementById('error');
-        error.textContent = '';
+  </div>
+
+  <script>
+    const form = document.getElementById('login-form');
+    const errorEl = document.getElementById('error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.textContent = '';
+      const password = document.getElementById('password').value;
+      try {
         const res = await fetch('/api/login', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ password: document.getElementById('password').value }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
         });
-        if (res.ok) location.href = '/';
-        else error.textContent = 'Password sbagliata.';
-      });
-    </script>
-  </body>
+        if (!res.ok) {
+          errorEl.textContent = 'Password sbagliata. Riprova.';
+          return;
+        }
+        const params = new URLSearchParams(location.search);
+        location.href = params.get('next') || '/';
+      } catch {
+        errorEl.textContent = 'Non riesco a contattare il server.';
+      }
+    });
+  </script>
+</body>
 </html>

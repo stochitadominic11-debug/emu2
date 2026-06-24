@@ -1,20 +1,153 @@
 <!doctype html>
 <html lang="it">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RemotePlay - Gioca</title>
-    <link rel="stylesheet" href="/style.css" />
-  </head>
-  <body class="play-page">
-    <div id="hud">
-      <span id="status">connessione...</span>
-      <button id="end" class="danger">Chiudi</button>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gioca — RemotePlay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+    .stage {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #screen {
+      max-width: 100%;
+      max-height: 100%;
+      background: #000;
+      /* il dito sul video controlla il mouse del gioco: niente scroll/zoom
+         del browser che rubi il gesto, e niente menù/selezione al tocco. */
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+    .hud {
+      position: absolute;
+      top: 0.75rem;
+      left: 0.75rem;
+      right: 0.75rem;
+      max-width: calc(100vw - 1.5rem);
+      display: flex;
+      flex-wrap: wrap;
+      row-gap: 0.35rem;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      background: rgba(20, 21, 27, 0.7);
+      padding: 0.4rem 0.7rem;
+      border-radius: 12px;
+      backdrop-filter: blur(6px);
+    }
+    .hud a {
+      margin-left: 0.5rem;
+      color: var(--text-dim);
+    }
+    .hud-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      white-space: nowrap;
+    }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 10, 13, 0.92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1.25rem;
+      text-align: center;
+      padding: 1.5rem;
+    }
+    .overlay h1 {
+      font-size: 1.4rem;
+    }
+    .overlay p {
+      max-width: 380px;
+    }
+    .hud-btn {
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.25rem 0.55rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .hud-btn:hover {
+      color: var(--text);
+    }
+    .settings-panel {
+      position: absolute;
+      top: 3.2rem;
+      right: 0.75rem;
+      width: min(280px, calc(100vw - 1.5rem));
+      background: rgba(20, 21, 27, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.9rem 1rem;
+      backdrop-filter: blur(6px);
+      display: none;
+      flex-direction: column;
+      gap: 0.6rem;
+      z-index: 5;
+    }
+    .settings-panel.show {
+      display: flex;
+    }
+    .settings-panel label {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .settings-panel input[type='range'] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <canvas id="screen"></canvas>
+    <audio id="audio" autoplay></audio>
+
+    <div class="hud">
+      <span class="hud-group"><span class="status-dot" id="conn-dot"></span><span id="conn-text">connessione…</span></span>
+      <span class="hud-group"><span class="status-dot" id="pad-dot"></span><span id="pad-text">nessun controller</span></span>
+      <button class="hud-btn" id="settings-btn">⚙ Visuale</button>
+      <a href="/">Libreria</a>
     </div>
-    <main id="stage">
-      <img id="video" alt="stream gioco" />
-      <div id="empty">In attesa dello stream dalla VM...</div>
-    </main>
-    <script src="/play.js"></script>
-  </body>
+
+    <div class="settings-panel" id="settings-panel">
+      <label for="sens-range">Sensibilità visuale: <span id="sens-value">30</span></label>
+      <input type="range" id="sens-range" min="5" max="80" step="1" value="30" />
+      <p class="dim" style="font-size: 0.75rem; margin: 0">
+        Muovi la levetta destra mentre regoli, per sentire la differenza.
+        Resta salvata anche quando rientri.
+      </p>
+    </div>
+
+    <div class="overlay" id="start-overlay">
+      <h1 id="start-title">Pronto a giocare?</h1>
+      <p class="dim" id="start-subtitle">
+        Tocca "Inizia". Da telefono usa il dito sullo schermo come mouse;
+        col controller premi un tasto qualsiasi per iniziare.
+      </p>
+      <button class="primary" id="start-btn">Inizia</button>
+    </div>
+  </div>
+
+  <script src="/play.js"></script>
+</body>
 </html>

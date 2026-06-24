@@ -1,65 +1,52 @@
-using System.Text.Json;
-
 namespace CaptureAgent;
 
+// Legge la configurazione dagli argomenti da riga di comando passati da agent.js, es:
+// CaptureAgent.exe --serverUrl http://localhost:3000 --agentSecret xxx
+//   --sessionId xxx --processName "Gamble With Your Friends.exe"
+//   --targetFps 18 --jpegQuality 55 --maxDimension 960
+//   --reconnectDelayMs 3000 --verbose true
 public static class AppConfigLoader
 {
     public static AppConfig Load(string[] args)
     {
-        // Uso:
-        // capture-agent.exe --sessionId abc --serverUrl http://localhost:3000 --agentSecret xxx --processName "Gamble With Your Friends.exe"
         var map = ParseArgs(args);
 
-        string serverUrl = map.GetValueOrDefault("serverUrl") ?? "http://localhost:3000";
-        string agentSecret = map.GetValueOrDefault("agentSecret") ?? throw new InvalidOperationException("Missing --agentSecret");
-        string sessionId = map.GetValueOrDefault("sessionId") ?? throw new InvalidOperationException("Missing --sessionId");
-        string processName = map.GetValueOrDefault("processName") ?? throw new InvalidOperationException("Missing --processName");
-
-        int targetFps = ParseInt(map.GetValueOrDefault("targetFps"), 30);
-        int jpegQuality = ParseInt(map.GetValueOrDefault("jpegQuality"), 75);
-        int reconnectDelayMs = ParseInt(map.GetValueOrDefault("reconnectDelayMs"), 3000);
-        int maxDimension = ParseInt(map.GetValueOrDefault("maxDimension"), 1280);
-        bool verbose = ParseBool(map.GetValueOrDefault("verbose"), false);
-
         return new AppConfig(
-            serverUrl,
-            agentSecret,
-            sessionId,
-            processName,
-            targetFps,
-            jpegQuality,
-            reconnectDelayMs,
-            maxDimension,
-            verbose
+            ServerUrl: Get(map, "serverUrl", "http://localhost:3000"),
+            AgentSecret: Get(map, "agentSecret", ""),
+            SessionId: Get(map, "sessionId", ""),
+            ProcessName: Get(map, "processName", ""),
+            TargetFps: GetInt(map, "targetFps", 18),
+            JpegQuality: GetInt(map, "jpegQuality", 55),
+            ReconnectDelayMs: GetInt(map, "reconnectDelayMs", 3000),
+            MaxDimension: GetInt(map, "maxDimension", 960),
+            Verbose: GetBool(map, "verbose", false)
         );
     }
 
     private static Dictionary<string, string> ParseArgs(string[] args)
     {
-        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < args.Length; i++)
         {
-            var a = args[i];
-            if (!a.StartsWith("--")) continue;
-
-            var key = a[2..];
+            if (!args[i].StartsWith("--")) continue;
+            string key = args[i][2..];
             string value = "true";
-
             if (i + 1 < args.Length && !args[i + 1].StartsWith("--"))
             {
                 value = args[++i];
             }
-
-            dict[key] = value;
+            map[key] = value;
         }
-
-        return dict;
+        return map;
     }
 
-    private static int ParseInt(string? value, int fallback)
-        => int.TryParse(value, out var n) ? n : fallback;
+    private static string Get(Dictionary<string, string> map, string key, string fallback) =>
+        map.TryGetValue(key, out var v) ? v : fallback;
 
-    private static bool ParseBool(string? value, bool fallback)
-        => bool.TryParse(value, out var b) ? b : fallback;
+    private static int GetInt(Dictionary<string, string> map, string key, int fallback) =>
+        map.TryGetValue(key, out var v) && int.TryParse(v, out var n) ? n : fallback;
+
+    private static bool GetBool(Dictionary<string, string> map, string key, bool fallback) =>
+        map.TryGetValue(key, out var v) && bool.TryParse(v, out var b) ? b : fallback;
 }
